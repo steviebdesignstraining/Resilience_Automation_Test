@@ -1,4 +1,4 @@
-import { expect, Locator, Page } from '@playwright/test';
+import {expect, Page} from '@playwright/test';
 
 export class HomePage {
     constructor(private page: Page) {}
@@ -44,13 +44,6 @@ export class HomePage {
         }
     }
 
-    /*************  ✨ Windsurf Command ⭐  *************/
-    /**
-     * Opens the search box and enters the given search term.
-     *
-     * @param term - The search term to enter.
-     */
-    /*******  91e1b960-525f-4ddf-8e57-e6a563a64e22  *******/
     async search(term: string) {
         const searchBox = this.page.getByRole('combobox', {
             name: 'Search for a place,',
@@ -84,7 +77,7 @@ export class HomePage {
             const text = await firstMenuItem.innerText();
             const trimmedText = text.trim().toLowerCase();
             trimmedText.startsWith('cambridge');
-            throw new Error('❌ No suggestions appeared after search.');
+            throw new Error('No suggestions appeared after search.');
         }
 
         const firstMenuItem = suggestions.first();
@@ -94,7 +87,7 @@ export class HomePage {
         const trimmedText = text.trim().toLowerCase();
 
         if (trimmedText.startsWith('cambridge')) {
-            console.log(`✅ First suggestion is Cambridge: "${text}"`);
+            console.log(`First suggestion is Cambridge: "${text}"`);
         } else {
             console.warn(
                 `⚠️ First suggestion is not Cambridge. Found: "${text}"`,
@@ -114,11 +107,6 @@ export class HomePage {
         // TempertatureState.textContent();
         const temperatureText = await TempertatureState.textContent();
         expect(temperatureText?.includes('°C'));
-        //     console.log('Temperature includes °C');
-        // } else {
-        //     console.error('Temperature does not include °C');
-        // }
-        // if (temperatureText?.includes('°F')) {
         await this.page
             .getByRole('cell', {name: 'Temperature °C Temperature'})
             .click();
@@ -130,11 +118,50 @@ export class HomePage {
             .nth(3)
             .textContent();
         expect(temperatureinFahrenheit).toContain('°F');
-        //         console.log('Temperature includes °F');
-        //     } else {
-        //         console.error('Temperature does not include °F');
-        //     }
-        // }
+    }
+
+    async windSpeed() {
+        const units = [
+            {label: 'mph', expectedSpan: '(mph)'},
+            {label: 'km/h', expectedSpan: '(km/h)'},
+            {label: 'knots', expectedSpan: '(knots)'},
+            {label: 'm/s', expectedSpan: '(mps)'},
+            {label: 'Beaufort', expectedSpan: '(Beaufort)'},
+        ];
+
+        for (const {label, expectedSpan} of units) {
+            console.log(`🌀 Checking wind speed unit: ${label}`);
+
+            const dropdown = this.page.getByLabel('Choose wind speed units');
+            await dropdown.scrollIntoViewIfNeeded();
+            await dropdown.selectOption({label});
+
+            // Wait a bit for UI to reflect the new unit
+            await this.page.waitForTimeout(500);
+
+            // Target the specific element by ID
+            const header = this.page.locator('#wind-gust-row-heading');
+            const unitSpan = header.locator('span.wind-gust-unit');
+
+            // Wait for the span to update its text
+            try {
+                await unitSpan.waitFor({state: 'visible', timeout: 5000});
+                await expect(unitSpan).toHaveText(expectedSpan);
+                console.log(
+                    `Wind gust unit "${expectedSpan}" is correctly shown`,
+                );
+            } catch (err) {
+                const actual = await unitSpan.textContent();
+                console.error(`Expected "${expectedSpan}" but saw "${actual}"`);
+                await this.page.screenshot({
+                    path: `wind-gust-unit-error-${label}.png`,
+                    fullPage: true,
+                });
+                throw new Error(
+                    `Unit mismatch for "${label}": expected "${expectedSpan}", got "${actual}"`,
+                );
+            }
+        }
     }
 
     async navigatetoWeather() {
@@ -147,9 +174,7 @@ export class HomePage {
         const detailedView = this.page
             .getByText('Feels like temperature (°C)')
             .first();
-        // await detailedView.scrollIntoViewIfNeeded();
         await expect(detailedView).toBeVisible();
-        // expect(detailedView).toContainText('Wind direction and speed');
     }
 
     async Date() {
@@ -192,7 +217,7 @@ export class HomePage {
         await mapSearch.fill('Cambridge');
         mapSearch.press('Enter', {timeout: 8000});
 
-        const timeSelected = await this.page.getByText('19:30').first();
+        const timeSelected = this.page.getByText('19:30').first();
         if (await timeSelected.isVisible()) {
             await timeSelected.click();
 
