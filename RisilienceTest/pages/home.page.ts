@@ -143,7 +143,6 @@ export class HomePage {
             const header = this.page.locator('#wind-gust-row-heading');
             const unitSpan = header.locator('span.wind-gust-unit');
 
-            // Wait for the span to update its text
             try {
                 await unitSpan.waitFor({state: 'visible', timeout: 5000});
                 await expect(unitSpan).toHaveText(expectedSpan);
@@ -191,10 +190,14 @@ export class HomePage {
         expect(tooltipText).toContain(
             'This number shows the air temperature at the time shown. You can see the temperature in Celsius or Fahrenheit by using the dropdown menu.',
         );
+        await this.page.getByRole('button', {name: 'Close'}).click();
     }
 
     async pollen() {
-        await this.page.getByRole('link', {name: 'Very High Pollen'}).click();
+        const pollenLink = this.page.getByRole('link', {name: 'Pollen'});
+        await pollenLink.scrollIntoViewIfNeeded();
+        await pollenLink.waitFor({state: 'visible', timeout: 5000});
+        await pollenLink.click();
         await this.page.locator('h1', {hasText: 'Pollen forecast'}).isVisible();
     }
 
