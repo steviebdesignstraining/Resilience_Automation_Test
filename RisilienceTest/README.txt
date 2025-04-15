@@ -8,7 +8,6 @@ Installed the following
 
 * Playwright with Typescript = npm init playwright@latest
 * .env = npm i dotenv
-* Fake data = npm i @faker-js/faker
 
 Completion and Updates
 

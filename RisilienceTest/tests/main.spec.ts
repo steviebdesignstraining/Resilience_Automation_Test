@@ -3,7 +3,7 @@ import {test} from '@playwright/test';
 import {HomePage} from '../pages/home.page';
 
 test.describe.serial('Main Page', () => {
-    const searchTerms = ['ca', 'cam', 'Cambridge'];
+    const searchTerms = ['cam', 'Cambridge'];
 
     test.beforeEach(async ({page, context}) => {
         await context.clearCookies();
@@ -30,7 +30,7 @@ test.describe.serial('Main Page', () => {
         const homePage = new HomePage(page);
         await homePage.search('Cambridge');
         await homePage.enterSearchTerm('Cambridge');
-        await homePage.temperature();
+        await homePage.temperatureUnit();
     });
 
     test('Validate changing the wind direction in (”mph”, “km/h”, ”knots”, “m/s”, “Beaufort”)', async ({

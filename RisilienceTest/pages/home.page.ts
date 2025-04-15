@@ -101,23 +101,61 @@ export class HomePage {
         ).toBeVisible();
     }
 
-    async temperature() {
-        const TempertatureState = this.page.locator('.temp-values').first();
-        TempertatureState.waitFor({state: 'visible', timeout: 5000});
-        // TempertatureState.textContent();
-        const temperatureText = await TempertatureState.textContent();
-        expect(temperatureText?.includes('°C'));
-        await this.page
-            .getByRole('cell', {name: 'Temperature °C Temperature'})
-            .click();
-        await this.page
-            .getByLabel('Choose temperature units')
-            .selectOption('°F');
-        const temperatureinFahrenheit = await this.page
-            .locator('.tooltip-header')
-            .nth(3)
-            .textContent();
-        expect(temperatureinFahrenheit).toContain('°F');
+    async temperatureUnit() {
+        const units = [
+            {value: 'c', expectedSpan: '(°C)'},
+            {value: 'f', expectedSpan: '(°F)'},
+        ];
+
+        for (const {value, expectedSpan} of units) {
+            console.log(`Checking temperature unit: ${value.toUpperCase()}`);
+
+            const dropdown = this.page.locator('#temperature-unit-select');
+
+            // Ensure dropdown is visible and ready
+            await dropdown.waitFor({state: 'visible', timeout: 5000});
+            await dropdown.scrollIntoViewIfNeeded();
+
+            // Use value instead of label to avoid encoding/spacing issues
+            try {
+                await dropdown.selectOption({value});
+                console.log(`Selected temperature unit: ${value}`);
+            } catch (e) {
+                console.error(
+                    `Failed to select "${value}" from temperature dropdown`,
+                );
+                await this.page.screenshot({
+                    path: `temp-unit-select-fail-${value}.png`,
+                    fullPage: true,
+                });
+                throw e;
+            }
+
+            // Wait for UI to reflect change
+            await this.page.waitForTimeout(500);
+
+            // Validate the unit display
+            const header = this.page.locator('#feels-like-temp-row-heading');
+            const unitSpan = header.locator('span.temperature-unit');
+
+            try {
+                await unitSpan.waitFor({state: 'visible', timeout: 5000});
+                await expect(unitSpan).toHaveText(expectedSpan);
+                console.log(`Unit "${expectedSpan}" is correctly shown`);
+            } catch (err) {
+                const actual = await unitSpan.textContent();
+                console.error(
+                    `Expected "${expectedSpan}", but saw "${actual}"`,
+                );
+                await this.page.screenshot({
+                    path: `temperature-unit-mismatch-${value}.png`,
+                    fullPage: true,
+                });
+                throw new Error(
+                    `Unit mismatch for "${value}": expected "${expectedSpan}", got "${actual}"`,
+                );
+            }
+        }
     }
 
     async windSpeed() {
@@ -130,7 +168,7 @@ export class HomePage {
         ];
 
         for (const {label, expectedSpan} of units) {
-            console.log(`🌀 Checking wind speed unit: ${label}`);
+            console.log(`Checking wind speed unit: ${label}`);
 
             const dropdown = this.page.getByLabel('Choose wind speed units');
             await dropdown.scrollIntoViewIfNeeded();
@@ -190,7 +228,7 @@ export class HomePage {
         expect(tooltipText).toContain(
             'This number shows the air temperature at the time shown. You can see the temperature in Celsius or Fahrenheit by using the dropdown menu.',
         );
-        await this.page.getByRole('button', {name: 'Close'}).click();
+        // await this.page.getByRole('button', {name: 'Close'}).click();
     }
 
     async pollen() {
@@ -200,41 +238,78 @@ export class HomePage {
         await pollenLink.click();
         await this.page.locator('h1', {hasText: 'Pollen forecast'}).isVisible();
     }
-
     async map() {
-        await this.page
-            .getByRole('navigation')
-            .getByRole('link', {name: 'Maps & charts'})
-            .click();
+        try {
+            // Navigate to "Maps & charts"
+            const navLink = this.page
+                .getByRole('navigation')
+                .getByRole('link', {
+                    name: 'Maps & charts',
+                });
+            await navLink.click();
 
-        const precipLink = this.page.getByRole('link', {
-            name: 'Precipitation map',
-        });
-        await precipLink.waitFor({state: 'visible', timeout: 5000});
-        await precipLink.click({force: true});
+            // Go to "Precipitation map"
+            const precipLink = this.page.getByRole('link', {
+                name: 'Precipitation map',
+            });
+            await precipLink.waitFor({state: 'visible', timeout: 10000});
+            await precipLink.click();
 
-        const mapSearch = this.page.getByRole('combobox', {
-            name: 'Search for a place,',
-        });
-        mapSearch.waitFor({state: 'visible'});
-        await mapSearch.fill('Cambridge');
-        mapSearch.press('Enter', {timeout: 8000});
+            // Search for location: Cambridge
+            const mapSearch = this.page.getByRole('combobox', {
+                name: 'Search for a place,',
+            });
+            await mapSearch.waitFor({state: 'visible', timeout: 10000});
+            await mapSearch.fill('Cambridge');
+            await mapSearch.press('Enter');
 
-        const timeSelected = this.page.getByText('01:30').first();
-        if (await timeSelected.isVisible()) {
-            await timeSelected.click();
-
-            await this.page
-                .locator('.ms-slide time-slide time-slide--selected')
-                .getByText('01:30')
-                .isVisible();
-        } else if (await timeSelected.isHidden()) {
-            const searchResult = this.page.getByText(
+            // Wait for and click search result
+            const locationResult = this.page.getByText(
                 'Cambridge (Cambridgeshire)',
             );
-            await searchResult.waitFor({state: 'visible'});
-            await searchResult.click();
-            console.log('Cambridge (Cambridgeshire) is not visible');
+            if (await locationResult.isVisible()) {
+                await locationResult.click();
+            }
+
+            // Wait for time slides to appear
+            const timeOptions = this.page.locator('.ms-slide.time-slide');
+            await expect(timeOptions.first()).toBeVisible({timeout: 10000});
+
+            const count = await timeOptions.count();
+            if (count === 0) throw new Error('No time options found');
+
+            // Pick a random time index
+            const randomIndex = Math.floor(Math.random() * count);
+            const randomTime = timeOptions.nth(randomIndex);
+            const timeText =
+                (await randomTime.textContent())?.trim() || 'Unknown';
+
+            console.log(`Attempting to click time slot: ${timeText}`);
+
+            // Ensure it's in view
+            await randomTime.scrollIntoViewIfNeeded();
+
+            // Attempt to click with fallback
+            try {
+                await randomTime.click({timeout: 5000});
+            } catch (e) {
+                console.warn('Normal click failed, retrying with force...');
+                await randomTime.click({force: true, timeout: 5000});
+            }
+
+            // Validate selection
+            await expect(
+                this.page.locator('.time-slide--selected'),
+            ).toContainText(timeText);
+        } catch (error) {
+            console.error('Map interaction failed:', error);
+            if (!this.page.isClosed()) {
+                await this.page.screenshot({
+                    path: 'map-error.png',
+                    fullPage: true,
+                });
+            }
+            throw error;
         }
     }
 }
