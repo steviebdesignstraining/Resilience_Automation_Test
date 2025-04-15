@@ -220,16 +220,20 @@ export class HomePage {
         await mapSearch.fill('Cambridge');
         mapSearch.press('Enter', {timeout: 8000});
 
-        const timeSelected = this.page.getByText('19:30').first();
+        const timeSelected = this.page.getByText('01:30').first();
         if (await timeSelected.isVisible()) {
             await timeSelected.click();
 
             await this.page
                 .locator('.ms-slide time-slide time-slide--selected')
-                .getByText('19:30')
+                .getByText('01:30')
                 .isVisible();
         } else if (await timeSelected.isHidden()) {
-            await this.page.getByText('Cambridge (Cambridgeshire)').click();
+            const searchResult = this.page.getByText(
+                'Cambridge (Cambridgeshire)',
+            );
+            await searchResult.waitFor({state: 'visible'});
+            await searchResult.click();
             console.log('Cambridge (Cambridgeshire) is not visible');
         }
     }

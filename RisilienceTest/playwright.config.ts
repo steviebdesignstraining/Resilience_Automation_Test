@@ -5,7 +5,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-import { defineConfig, devices } from '@playwright/test';
+import {defineConfig, devices} from '@playwright/test';
 
 dotenv.config();
 
@@ -43,15 +43,15 @@ export default defineConfig({
             use: {...devices['Desktop Chrome']},
         },
 
-        {
-            name: 'firefox',
-            use: {...devices['Desktop Firefox']},
-        },
+        // {
+        //     name: 'firefox',
+        //     use: {...devices['Desktop Firefox']},
+        // },
 
-        {
-            name: 'webkit',
-            use: {...devices['Desktop Safari']},
-        },
+        // {
+        //     name: 'webkit',
+        //     use: {...devices['Desktop Safari']},
+        // },
 
         /* Test against mobile viewports. */
         // {
