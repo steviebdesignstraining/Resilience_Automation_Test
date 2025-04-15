@@ -28,13 +28,13 @@ jobs:
         working-directory: ./RisilienceTest
         run: npx playwright install --with-deps
 
-      - name: Run Playwright tests
+      - name: Run Playwright Tests
         working-directory: ./RisilienceTest
-        run: npx playwright test
+        run: npx playwright test --reporter=html
 
-      - name: Upload Playwright report
+      - name: Upload HTML Test Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-html-report
           path: RisilienceTest/playwright-report/
