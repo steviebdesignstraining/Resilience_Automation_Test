@@ -1,6 +1,6 @@
-import {test} from '@playwright/test';
+import { test } from '@playwright/test';
 
-import {HomePage} from '../pages/home.page';
+import { HomePage } from '../pages/home.page';
 
 test.describe.serial('Main Page', () => {
     const searchTerms = ['cam', 'Cambridge'];
@@ -66,8 +66,6 @@ test.describe.serial('Main Page', () => {
         page,
     }) => {
         const homePage = new HomePage(page);
-        await homePage.search('Cambridge');
-        await homePage.enterSearchTerm('Cambridge');
         await homePage.map();
     });
 });

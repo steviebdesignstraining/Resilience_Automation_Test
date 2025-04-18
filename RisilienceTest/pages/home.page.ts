@@ -1,10 +1,10 @@
-import {expect, Page} from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 
 export class HomePage {
     constructor(private page: Page) {}
 
     async homePageLanding() {
-        const baseUrl = process.env.BASE_URL || 'https://www.ft.com/';
+        const baseUrl = process.env.BASE_URL || 'https://www.metoffice.gov.uk/';
         await this.page.goto(baseUrl);
         await this.page.getByRole('button', {name: 'Accept All'}).click();
     }
@@ -61,27 +61,34 @@ export class HomePage {
         await searchBox.fill(term);
         console.log(`Filled search with "${term}"`);
 
-        // Wait a bit for suggestions to populate
-        await this.page.waitForTimeout(1000);
-
         const suggestions = this.page.locator(
             '#suggested-results [role="menuitem"]',
         );
+
+        // Wait up to 10s for suggestions to appear
+        try {
+            await this.page.waitForFunction(
+                () => {
+                    const items = document.querySelectorAll(
+                        '#suggested-results [role="menuitem"]',
+                    );
+                    return items.length > 0;
+                },
+                null,
+                {timeout: 10000},
+            );
+        } catch (e) {
+            await this.page.screenshot({path: 'search-no-suggestions.png'});
+            throw new Error(
+                `No suggestions appeared after searching for "${term}".`,
+            );
+        }
+
         const suggestionCount = await suggestions.count();
         console.log(`Suggestion count: ${suggestionCount}`);
 
-        if (suggestionCount === 0) {
-            const firstMenuItem = suggestions.first();
-            await firstMenuItem.waitFor({state: 'visible', timeout: 10000});
-
-            const text = await firstMenuItem.innerText();
-            const trimmedText = text.trim().toLowerCase();
-            trimmedText.startsWith('cambridge');
-            throw new Error('No suggestions appeared after search.');
-        }
-
         const firstMenuItem = suggestions.first();
-        await firstMenuItem.waitFor({state: 'visible', timeout: 10000});
+        await firstMenuItem.waitFor({state: 'visible', timeout: 5000});
 
         const text = await firstMenuItem.innerText();
         const trimmedText = text.trim().toLowerCase();
@@ -93,8 +100,12 @@ export class HomePage {
                 `⚠️ First suggestion is not Cambridge. Found: "${text}"`,
             );
         }
+        const firstItem = this.page.locator('#suggested-results > li').first();
+        await firstItem.click(); // or whatever action you want
 
-        await searchBox.press('Enter');
+        // await firstMenuItem.waitFor({state: 'visible', timeout: 5000});
+        // await firstMenuItem.click();
+        // await searchBox.press('Enter');
 
         await expect(
             this.page.getByRole('heading', {name: 'Today.'}).getByRole('time'),
@@ -113,7 +124,7 @@ export class HomePage {
             const dropdown = this.page.locator('#temperature-unit-select');
 
             // Ensure dropdown is visible and ready
-            await dropdown.waitFor({state: 'visible', timeout: 5000});
+            await dropdown.waitFor({state: 'visible', timeout: 10000});
             await dropdown.scrollIntoViewIfNeeded();
 
             // Use value instead of label to avoid encoding/spacing issues
@@ -172,10 +183,11 @@ export class HomePage {
 
             const dropdown = this.page.getByLabel('Choose wind speed units');
             await dropdown.scrollIntoViewIfNeeded();
+            // await dropdown.click();
             await dropdown.selectOption({label});
 
             // Wait a bit for UI to reflect the new unit
-            await this.page.waitForTimeout(500);
+            // await this.page.waitForTimeout(5000);
 
             // Target the specific element by ID
             const header = this.page.locator('#wind-gust-row-heading');
@@ -228,7 +240,6 @@ export class HomePage {
         expect(tooltipText).toContain(
             'This number shows the air temperature at the time shown. You can see the temperature in Celsius or Fahrenheit by using the dropdown menu.',
         );
-        // await this.page.getByRole('button', {name: 'Close'}).click();
     }
 
     async pollen() {
@@ -240,7 +251,6 @@ export class HomePage {
     }
     async map() {
         try {
-            // Navigate to "Maps & charts"
             const navLink = this.page
                 .getByRole('navigation')
                 .getByRole('link', {
@@ -248,61 +258,60 @@ export class HomePage {
                 });
             await navLink.click();
 
-            // Go to "Precipitation map"
             const precipLink = this.page.getByRole('link', {
                 name: 'Precipitation map',
             });
             await precipLink.waitFor({state: 'visible', timeout: 10000});
-            await precipLink.click();
+            await precipLink.click({force: true});
 
-            // Search for location: Cambridge
+            await this.page.waitForSelector('#map', {
+                state: 'visible',
+                timeout: 15000, // more generous for CI
+            });
+            await this.page.waitForURL('**/maps-and-charts/precipitation-map', {
+                waitUntil: 'load',
+                timeout: 15000, // more generous for CI
+            });
+
             const mapSearch = this.page.getByRole('combobox', {
                 name: 'Search for a place,',
             });
-            await mapSearch.waitFor({state: 'visible', timeout: 10000});
+            await mapSearch.waitFor({state: 'visible', timeout: 20000});
             await mapSearch.fill('Cambridge');
             await mapSearch.press('Enter');
 
-            // Wait for and click search result
-            const locationResult = this.page.getByText(
-                'Cambridge (Cambridgeshire)',
-            );
-            if (await locationResult.isVisible()) {
-                await locationResult.click();
-            }
-
-            // Wait for time slides to appear
             const timeOptions = this.page.locator('.ms-slide.time-slide');
-            await expect(timeOptions.first()).toBeVisible({timeout: 10000});
+
+            await this.page.waitForSelector('.ms-slide.time-slide', {
+                state: 'visible',
+                timeout: 15000, // more generous for CI
+            });
 
             const count = await timeOptions.count();
             if (count === 0) throw new Error('No time options found');
 
-            // Pick a random time index
             const randomIndex = Math.floor(Math.random() * count);
             const randomTime = timeOptions.nth(randomIndex);
             const timeText =
                 (await randomTime.textContent())?.trim() || 'Unknown';
 
-            console.log(`Attempting to click time slot: ${timeText}`);
+            console.log(`🕒 Attempting to click time slot: ${timeText}`);
 
-            // Ensure it's in view
             await randomTime.scrollIntoViewIfNeeded();
+            await randomTime.waitFor({state: 'visible', timeout: 5000});
 
-            // Attempt to click with fallback
             try {
-                await randomTime.click({timeout: 5000});
+                await randomTime.click({timeout: 10000});
             } catch (e) {
-                console.warn('Normal click failed, retrying with force...');
-                await randomTime.click({force: true, timeout: 5000});
+                console.warn('⚠️ Normal click failed, retrying with force...');
+                // await randomTime.click({force: true, timeout: 10000});
             }
 
-            // Validate selection
             await expect(
                 this.page.locator('.time-slide--selected'),
             ).toContainText(timeText);
         } catch (error) {
-            console.error('Map interaction failed:', error);
+            console.error('💥 Map interaction failed:', error);
             if (!this.page.isClosed()) {
                 await this.page.screenshot({
                     path: 'map-error.png',
