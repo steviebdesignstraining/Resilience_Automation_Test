@@ -1,71 +1,54 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 
 export class HomePage {
-    constructor(private page: Page) {}
+    private baseUrl = process.env.BASE_URL || 'https://www.metoffice.gov.uk/';
+    private acceptAllButton: Locator;
+    private searchBox: Locator;
+    private suggestionItems: Locator;
+    private tempUnitDropdown: Locator;
+    private windUnitDropdown: Locator;
+
+    constructor(private page: Page) {
+        this.acceptAllButton = this.page.getByRole('button', {
+            name: 'Accept All',
+        });
+        this.searchBox = this.page.getByRole('combobox', {
+            name: 'Search for a place,',
+        });
+        this.suggestionItems = this.page.locator(
+            '#suggested-results [role="menuitem"]',
+        );
+        this.tempUnitDropdown = this.page.locator('#temperature-unit-select');
+        this.windUnitDropdown = this.page.getByLabel('Choose wind speed units');
+    }
 
     async homePageLanding() {
-        const baseUrl = process.env.BASE_URL || 'https://www.metoffice.gov.uk/';
-        await this.page.goto(baseUrl);
-        await this.page.getByRole('button', {name: 'Accept All'}).click();
+        await this.page.goto(this.baseUrl);
+        await this.acceptAllButton.click();
     }
 
     async cookies() {
-        const acceptButton = this.page.getByRole('button', {
-            name: 'Accept All',
-        });
-
-        if (await acceptButton.isVisible()) {
-            await acceptButton.click();
+        if (await this.acceptAllButton.isVisible()) {
+            await this.acceptAllButton.click();
             console.log('Clicked Accept All');
         } else {
             const header = this.page.locator('h1, h2, h3', {
                 hasText: 'Find a forecast',
             });
-            if (await header.isVisible()) {
-                console.log('Verified header: Find a forecast');
-            } else {
-                console.log('Header not found!');
-            }
-        }
-    }
-
-    async searchBoxError() {
-        const searchBarError = this.page.locator('#search-results-box');
-        searchBarError.waitFor({state: 'visible', timeout: 5000});
-        const errorMessages = await searchBarError.allTextContents();
-        if (
-            errorMessages.includes(
-                "Sorry we don't have any matches for that. Please re-enter your place, postcode or country above.",
-            )
-        ) {
-            console.log('Error message displayed as expected.');
-        } else {
-            console.error('Expected error message not found.');
+            const visible = await header.isVisible();
+            console.log(visible ? 'Header found' : 'Header not found');
         }
     }
 
     async search(term: string) {
-        const searchBox = this.page.getByRole('combobox', {
-            name: 'Search for a place,',
-        });
-
-        await searchBox.click();
-        await searchBox.fill(term);
+        await this.searchBox.click();
+        await this.searchBox.fill(term);
     }
 
     async enterSearchTerm(term: string) {
-        const searchBox = this.page.getByRole('combobox', {
-            name: 'Search for a place,',
-        });
-        await searchBox.click();
-        await searchBox.fill(term);
-        console.log(`Filled search with "${term}"`);
+        await this.search(term);
+        console.log(`🔍 Entered search term: "${term}"`);
 
-        const suggestions = this.page.locator(
-            '#suggested-results [role="menuitem"]',
-        );
-
-        // Wait up to 10s for suggestions to appear
         try {
             await this.page.waitForFunction(
                 () => {
@@ -77,142 +60,106 @@ export class HomePage {
                 null,
                 {timeout: 10000},
             );
-        } catch (e) {
+        } catch {
             await this.page.screenshot({path: 'search-no-suggestions.png'});
-            throw new Error(
-                `No suggestions appeared after searching for "${term}".`,
-            );
+            throw new Error(`No suggestions for "${term}"`);
         }
 
-        const suggestionCount = await suggestions.count();
-        console.log(`Suggestion count: ${suggestionCount}`);
+        const count = await this.suggestionItems.count();
+        console.log(`🔢 Suggestions: ${count}`);
 
-        const firstMenuItem = suggestions.first();
-        await firstMenuItem.waitFor({state: 'visible', timeout: 5000});
+        const firstItem = this.suggestionItems.first();
+        await firstItem.waitFor({state: 'visible', timeout: 5000});
 
-        const text = await firstMenuItem.innerText();
-        const trimmedText = text.trim().toLowerCase();
+        const text = (await firstItem.innerText()).trim().toLowerCase();
+        text.startsWith('cambridge')
+            ? console.log(`Suggestion: Cambridge (${text})`)
+            : console.warn(`⚠️ Unexpected suggestion: "${text}"`);
 
-        if (trimmedText.startsWith('cambridge')) {
-            console.log(`First suggestion is Cambridge: "${text}"`);
-        } else {
-            console.warn(
-                `⚠️ First suggestion is not Cambridge. Found: "${text}"`,
-            );
-        }
-        const firstItem = this.page.locator('#suggested-results > li').first();
-        await firstItem.click(); // or whatever action you want
-
-        // await firstMenuItem.waitFor({state: 'visible', timeout: 5000});
-        // await firstMenuItem.click();
-        // await searchBox.press('Enter');
+        await this.page.locator('#suggested-results > li').first().click();
 
         await expect(
             this.page.getByRole('heading', {name: 'Today.'}).getByRole('time'),
         ).toBeVisible();
     }
 
+    async searchBoxError() {
+        const errorBox = this.page.locator('#search-results-box');
+        await errorBox.waitFor({state: 'visible', timeout: 5000});
+        const errors = await errorBox.allTextContents();
+
+        const expected =
+            "Sorry we don't have any matches for that. Please re-enter your place, postcode or country above.";
+        errors.includes(expected)
+            ? console.log('Error message displayed.')
+            : console.error('Expected error not found.');
+    }
+
     async temperatureUnit() {
         const units = [
-            {value: 'c', expectedSpan: '(°C)'},
-            {value: 'f', expectedSpan: '(°F)'},
+            {value: 'c', expected: '(°C)'},
+            {value: 'f', expected: '(°F)'},
         ];
 
-        for (const {value, expectedSpan} of units) {
-            console.log(`Checking temperature unit: ${value.toUpperCase()}`);
-
-            const dropdown = this.page.locator('#temperature-unit-select');
-
-            // Ensure dropdown is visible and ready
-            await dropdown.waitFor({state: 'visible', timeout: 10000});
-            await dropdown.scrollIntoViewIfNeeded();
-
-            // Use value instead of label to avoid encoding/spacing issues
+        for (const {value, expected} of units) {
+            console.log(`🌡️ Setting temperature to ${value.toUpperCase()}`);
             try {
-                await dropdown.selectOption({value});
-                console.log(`Selected temperature unit: ${value}`);
-            } catch (e) {
-                console.error(
-                    `Failed to select "${value}" from temperature dropdown`,
+                await this.tempUnitDropdown.selectOption({value});
+                await this.page.waitForTimeout(500);
+
+                const unitSpan = this.page.locator(
+                    '#feels-like-temp-row-heading span.temperature-unit',
                 );
+                await unitSpan.waitFor({state: 'visible', timeout: 5000});
+                await expect(unitSpan).toHaveText(expected);
+
+                console.log(`Temperature unit "${expected}" shown`);
+            } catch (e) {
+                const actual = await this.page
+                    .locator('span.temperature-unit')
+                    .textContent();
+                console.error(`Expected: "${expected}", Got: "${actual}"`);
                 await this.page.screenshot({
-                    path: `temp-unit-select-fail-${value}.png`,
+                    path: `temp-unit-error-${value}.png`,
                     fullPage: true,
                 });
                 throw e;
-            }
-
-            // Wait for UI to reflect change
-            await this.page.waitForTimeout(500);
-
-            // Validate the unit display
-            const header = this.page.locator('#feels-like-temp-row-heading');
-            const unitSpan = header.locator('span.temperature-unit');
-
-            try {
-                await unitSpan.waitFor({state: 'visible', timeout: 5000});
-                await expect(unitSpan).toHaveText(expectedSpan);
-                console.log(`Unit "${expectedSpan}" is correctly shown`);
-            } catch (err) {
-                const actual = await unitSpan.textContent();
-                console.error(
-                    `Expected "${expectedSpan}", but saw "${actual}"`,
-                );
-                await this.page.screenshot({
-                    path: `temperature-unit-mismatch-${value}.png`,
-                    fullPage: true,
-                });
-                throw new Error(
-                    `Unit mismatch for "${value}": expected "${expectedSpan}", got "${actual}"`,
-                );
             }
         }
     }
 
     async windSpeed() {
         const units = [
-            {label: 'mph', expectedSpan: '(mph)'},
-            {label: 'km/h', expectedSpan: '(km/h)'},
-            {label: 'knots', expectedSpan: '(knots)'},
-            {label: 'm/s', expectedSpan: '(mps)'},
-            {label: 'Beaufort', expectedSpan: '(Beaufort)'},
+            {label: 'mph', expected: '(mph)'},
+            {label: 'km/h', expected: '(km/h)'},
+            {label: 'knots', expected: '(knots)'},
+            {label: 'm/s', expected: '(mps)'},
+            {label: 'Beaufort', expected: '(Beaufort)'},
         ];
 
-        for (const {label, expectedSpan} of units) {
-            console.log(`Checking wind speed unit: ${label}`);
+        for (const {label, expected} of units) {
+            console.log(`💨 Checking wind unit: ${label}`);
+            await this.windUnitDropdown.selectOption({label});
 
-            const dropdown = this.page.getByLabel('Choose wind speed units');
-            await dropdown.scrollIntoViewIfNeeded();
-            // await dropdown.click();
-            await dropdown.selectOption({label});
-
-            // Wait a bit for UI to reflect the new unit
-            // await this.page.waitForTimeout(5000);
-
-            // Target the specific element by ID
-            const header = this.page.locator('#wind-gust-row-heading');
-            const unitSpan = header.locator('span.wind-gust-unit');
+            const unitSpan = this.page.locator(
+                '#wind-gust-row-heading span.wind-gust-unit',
+            );
+            await unitSpan.waitFor({state: 'visible', timeout: 5000});
 
             try {
-                await unitSpan.waitFor({state: 'visible', timeout: 5000});
-                await expect(unitSpan).toHaveText(expectedSpan);
-                console.log(
-                    `Wind gust unit "${expectedSpan}" is correctly shown`,
-                );
-            } catch (err) {
+                await expect(unitSpan).toHaveText(expected);
+                console.log(`Wind unit "${expected}" shown`);
+            } catch (e) {
                 const actual = await unitSpan.textContent();
-                console.error(`Expected "${expectedSpan}" but saw "${actual}"`);
+                console.error(`Expected: "${expected}", Got: "${actual}"`);
                 await this.page.screenshot({
-                    path: `wind-gust-unit-error-${label}.png`,
+                    path: `wind-unit-error-${label}.png`,
                     fullPage: true,
                 });
-                throw new Error(
-                    `Unit mismatch for "${label}": expected "${expectedSpan}", got "${actual}"`,
-                );
+                throw e;
             }
         }
     }
-
     async navigatetoWeather() {
         const forecastButton = this.page.getByRole('button', {
             name: 'Show reduced forecast',
@@ -225,87 +172,74 @@ export class HomePage {
             .first();
         await expect(detailedView).toBeVisible();
     }
-
     async Date() {
         await this.page.getByRole('link', {name: 'Sun 20 Apr'}).first().click();
-        const dayLabel = this.page.getByText('Sunday (20 April 2025)').first();
-        await expect(dayLabel).toContainText('Sunday');
+        const label = this.page.getByText('Sunday (20 April 2025)').first();
+        await expect(label).toContainText('Sunday');
     }
 
     async tooltip() {
         await this.page.getByTestId('Temperature-enhanced').click();
-        const tooltipText = await this.page
+        const tooltip = await this.page
             .locator('.tooltip-content')
             .allTextContents();
-        expect(tooltipText).toContain(
+        expect(tooltip).toContain(
             'This number shows the air temperature at the time shown. You can see the temperature in Celsius or Fahrenheit by using the dropdown menu.',
         );
     }
-
     async pollen() {
-        const pollenLink = this.page.getByRole('link', {name: 'Pollen'});
-        await pollenLink.scrollIntoViewIfNeeded();
-        await pollenLink.waitFor({state: 'visible', timeout: 5000});
-        await pollenLink.click();
-        await this.page.locator('h1', {hasText: 'Pollen forecast'}).isVisible();
+        const pollen = this.page.getByRole('link', {name: 'Pollen'});
+        await pollen.scrollIntoViewIfNeeded();
+        await pollen.waitFor({state: 'visible', timeout: 5000});
+        await pollen.click();
+        await expect(
+            this.page.locator('h1', {hasText: 'Pollen forecast'}),
+        ).toBeVisible();
     }
+
     async map() {
         try {
             const navLink = this.page
                 .getByRole('navigation')
-                .getByRole('link', {
-                    name: 'Maps & charts',
-                });
+                .getByRole('link', {name: 'Maps & charts'});
             await navLink.click();
 
-            const precipLink = this.page.getByRole('link', {
+            const precip = this.page.getByRole('link', {
                 name: 'Precipitation map',
             });
-            await precipLink.waitFor({state: 'visible', timeout: 10000});
-            await precipLink.click({force: true});
+            await precip.waitFor({state: 'visible', timeout: 10000});
+            await precip.click({force: true});
 
             await this.page.waitForSelector('#map', {
                 state: 'visible',
-                timeout: 15000, // more generous for CI
+                timeout: 15000,
             });
             await this.page.waitForURL('**/maps-and-charts/precipitation-map', {
                 waitUntil: 'load',
-                timeout: 15000, // more generous for CI
+                timeout: 15000,
             });
 
-            const mapSearch = this.page.getByRole('combobox', {
-                name: 'Search for a place,',
-            });
+            const mapSearch = this.searchBox;
             await mapSearch.waitFor({state: 'visible', timeout: 20000});
             await mapSearch.fill('Cambridge');
             await mapSearch.press('Enter');
 
             const timeOptions = this.page.locator('.ms-slide.time-slide');
-
-            await this.page.waitForSelector('.ms-slide.time-slide', {
-                state: 'visible',
-                timeout: 15000, // more generous for CI
-            });
+            await timeOptions
+                .first()
+                .waitFor({state: 'visible', timeout: 15000});
 
             const count = await timeOptions.count();
-            if (count === 0) throw new Error('No time options found');
+            if (!count) throw new Error('❌ No time options found');
 
             const randomIndex = Math.floor(Math.random() * count);
             const randomTime = timeOptions.nth(randomIndex);
             const timeText =
                 (await randomTime.textContent())?.trim() || 'Unknown';
 
-            console.log(`🕒 Attempting to click time slot: ${timeText}`);
-
+            console.log(`🕒 Clicking time: ${timeText}`);
             await randomTime.scrollIntoViewIfNeeded();
-            await randomTime.waitFor({state: 'visible', timeout: 5000});
-
-            try {
-                await randomTime.click({timeout: 10000});
-            } catch (e) {
-                console.warn('⚠️ Normal click failed, retrying with force...');
-                // await randomTime.click({force: true, timeout: 10000});
-            }
+            await randomTime.click({timeout: 10000});
 
             await expect(
                 this.page.locator('.time-slide--selected'),
